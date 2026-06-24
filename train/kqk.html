@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Checkpoint — King + Queen vs King</title>
+<!-- chess.js handles the rules. The bot's defence + mate-distance feedback
+     come from the free Lichess endgame tablebase API. -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
+<style>
+  :root {
+    --light-sq: #eeeed2; --dark-sq: #769656; --highlight: #f6f669;
+    --good: #6dbf67; --bad: #e0685f; --warn: #e8b04b; --info:#7fb2e8; --ink: #2a2a2a;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+    background: #1f2421; color: #f2f2f2; margin: 0; min-height: 100vh;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px;
+  }
+  .back { position: fixed; top: 16px; left: 16px; color: #9fb0a5; text-decoration: none; font-size: 14px; font-weight: 600; }
+  .back:hover { color: #19c37d; }
+  .card {
+    background: #2c322e; border-radius: 16px; padding: 24px;
+    box-shadow: 0 10px 40px rgba(0,0,0,.4); max-width: 520px; width: 100%;
+  }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  .sub { color: #9fb0a5; font-size: 14px; margin: 0 0 16px; }
+  .prompt {
+    background: #353c37; border-left: 4px solid var(--dark-sq);
+    padding: 10px 14px; border-radius: 8px; margin-bottom: 14px; font-size: 15px;
+  }
+  .stats { display:flex; gap:10px; margin-bottom: 14px; }
+  .stat { flex:1; background:#353c37; border-radius:8px; padding:8px 10px; text-align:center; }
+  .stat .label { font-size:11px; color:#9fb0a5; text-transform:uppercase; letter-spacing:.04em; }
+  .stat .val { font-size:18px; font-weight:700; margin-top:2px; }
+  #board {
+    width: 100%; aspect-ratio: 1 / 1; display: grid;
+    grid-template-columns: repeat(8, 1fr); grid-template-rows: repeat(8, 1fr);
+    border-radius: 8px; overflow: hidden; user-select: none; touch-action: none;
+  }
+  .sq { position: relative; display: flex; align-items: center; justify-content: center;
+        font-size: clamp(28px, 9vw, 52px); line-height: 1; cursor: pointer; }
+  .sq.light { background: var(--light-sq); }
+  .sq.dark  { background: var(--dark-sq); }
+  .sq.sel::after { content:""; position:absolute; inset:0; background:var(--highlight); opacity:.55; }
+  .piece { position: relative; z-index: 2; cursor: grab; }
+  .piece.w { color: #ffffff; text-shadow: 0 0 1px #000, 0 1px 2px rgba(0,0,0,.45); }
+  .piece.b { color: var(--ink); text-shadow: 0 1px 1px rgba(255,255,255,.15); }
+  .ghost { position: fixed; z-index: 999; pointer-events: none; transform: translate(-50%, -50%); line-height: 1; }
+  .coord { position: absolute; z-index: 3; font-size: 10px; font-weight: 700; opacity: .55; pointer-events: none; }
+  .coord.file { right: 3px; bottom: 1px; }
+  .coord.rank { left: 3px; top: 1px; }
+  .feedback { margin-top: 14px; min-height: 24px; font-weight: 600; text-align: center; font-size: 15px; }
+  .feedback.good { color: var(--good); }
+  .feedback.bad  { color: var(--bad); }
+  .feedback.warn { color: var(--warn); }
+  .feedback.info { color: var(--info); }
+  .controls { margin-top:14px; display:flex; flex-wrap:wrap; gap:10px; align-items:center; justify-content:center; }
+  .controls label { font-size:13px; color:#cfdacf; }
+  input[type=number] { width:56px; background:#1f2421; color:#fff; border:1px solid #4a544c;
+                       border-radius:6px; padding:6px; font-size:14px; text-align:center; }
+  button { background: var(--dark-sq); color:#fff; border:0; padding:9px 16px; border-radius: 8px;
+           font-size:14px; cursor:pointer; font-weight:600; }
+  button.ghost-btn { background:#3d453f; }
+</style>
+</head>
+<body>
+  <a class="back" href="../index.html">‹ Checkpoint</a>
+  <div class="card">
+    <h1>♛ Trainer — King + Queen vs King</h1>
+    <p class="sub">You play White. The black king defends perfectly (Lichess endgame tablebase).</p>
+
+    <div class="prompt" id="prompt">Checkmate the black king. After every move, I'll tell you whether you're still on the fastest line.</div>
+
+    <div class="stats">
+      <div class="stat"><div class="label">Fastest mate from here</div><div class="val" id="optimal">—</div></div>
+      <div class="stat"><div class="label">Your moves</div><div class="val" id="movecount">0</div></div>
+    </div>
+
+    <div id="board"></div>
+    <div class="feedback info" id="feedback">Connecting to the endgame tablebase…</div>
+
+    <div class="controls">
+      <label>Warn me if I delay mate by ≥ <input type="number" id="threshold" value="2" min="1" max="20" /> move(s)</label>
+      <button class="ghost-btn" id="reset">Restart</button>
+    </div>
+  </div>
+
+<script>
+  const START_FEN = "8/8/8/4k3/8/8/8/3QK3 w - - 0 1";
+  const GLYPH = { k:"♚", q:"♛", r:"♜", b:"♝", n:"♞", p:"♟" };
+  const FILES = "abcdefgh";
+  const TB_URL = "https://tablebase.lichess.ovh/standard?fen=";
+
+  const boardEl = document.getElementById("board");
+  const feedbackEl = document.getElementById("feedback");
+  const optimalEl = document.getElementById("optimal");
+  const moveCountEl = document.getElementById("movecount");
+
+  let game;        // chess.js instance
+  let selected;    // selected square (click mode)
+  let drag;        // active drag or null
+  let pendingClick;
+  let busy;        // input locked while we wait on the network / bot
+  let over;        // game finished
+  let userMoves;   // count of white moves played
+  let optimalStart;// optimal number of white moves to mate, from the start
+  let root;        // { bestPlies, optimalNow, byUci:{uci:plies}, draws:Set } for current white-to-move position
+
+  // ---------- tablebase ----------
+  async function fetchTB(fen) {
+    const res = await fetch(TB_URL + encodeURIComponent(fen));
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    return res.json();
+  }
+  const platesToMoves = (plies) => Math.ceil(Math.abs(plies) / 2);
+
+  // Build the feedback data for a white-to-move position.
+  function setRoot(data) {
+    const byUci = {};
+    let best = Infinity;
+    for (const m of data.moves) {
+      if (m.stalemate || m.category === "draw" || m.dtm === null || m.dtm === undefined) {
+        byUci[m.uci] = { draw: true };
+        continue;
+      }
+      const plies = Math.abs(m.dtm);
+      byUci[m.uci] = { draw: false, plies };
+      if (plies < best) best = plies;
+    }
+    root = {
+      bestPlies: best === Infinity ? null : best,
+      optimalNow: data.dtm != null ? platesToMoves(data.dtm) : null,
+      byUci
+    };
+    optimalEl.textContent = root.optimalNow != null ? (root.optimalNow + " moves") : "—";
+  }
+
+  // ---------- rendering ----------
+  function render() {
+    boardEl.innerHTML = "";
+    const board = game.board(); // rank 8 (top) -> rank 1
+    for (let r = 0; r < 8; r++) {
+      for (let f = 0; f < 8; f++) {
+        const square = FILES[f] + (8 - r);
+        const cell = document.createElement("div");
+        cell.className = "sq " + ((r + f) % 2 === 0 ? "light" : "dark");
+        cell.dataset.square = square;
+        if (selected === square) cell.classList.add("sel");
+        const piece = board[r][f];
+        const hidden = drag && drag.moved && drag.from === square;
+        if (piece && !hidden) {
+          const span = document.createElement("span");
+          span.className = "piece " + piece.color;
+          span.textContent = GLYPH[piece.type];
+          cell.appendChild(span);
+        }
+        if (f === 0) { const c=document.createElement("span"); c.className="coord rank"; c.textContent=8-r; cell.appendChild(c); }
+        if (r === 7) { const c=document.createElement("span"); c.className="coord file"; c.textContent=FILES[f]; cell.appendChild(c); }
+        cell.addEventListener("pointerdown", (e) => onPointerDown(e, square));
+        boardEl.appendChild(cell);
+      }
+    }
+  }
+  function setFeedback(text, kind) { feedbackEl.textContent = text; feedbackEl.className = "feedback " + (kind || ""); }
+
+  // ---------- the user's move ----------
+  async function attemptUserMove(from, to) {
+    if (busy || over) return;
+    const mv = game.move({ from, to });          // null if illegal
+    if (!mv) { setFeedback("Illegal move.", "bad"); selected = null; render(); return; }
+
+    userMoves++; moveCountEl.textContent = userMoves;
+    const uci = from + to;
+    render();
+
+    if (game.in_checkmate()) {
+      over = true;
+      const extra = userMoves - optimalStart;
+      const tail = extra <= 0 ? "Perfect mate — right on the optimal line! 🏆"
+                              : "Optimal: " + optimalStart + " moves (you took " + extra + " more).";
+      setFeedback("Checkmate in " + userMoves + " moves! " + tail, "good");
+      return;
+    }
+    if (game.in_stalemate()) {
+      over = true;
+      setFeedback("❌ Stalemate! The black king has no move — you've thrown away the win. Try again.", "bad");
+      return;
+    }
+
+    // quality feedback, using the data captured before the move
+    const info = root && root.byUci[uci];
+    if (info && info.draw) {
+      setFeedback("⚠️ That move throws away the win (draw). Try again.", "bad");
+    } else if (info && root.bestPlies != null) {
+      const delay = platesToMoves(info.plies) - platesToMoves(root.bestPlies);
+      const threshold = Math.max(1, parseInt(document.getElementById("threshold").value, 10) || 2);
+      if (delay <= 0)       setFeedback("✓ Optimal move.", "good");
+      else if (delay < threshold) setFeedback("✓ Fine — delays mate by " + delay + " move(s).", "info");
+      else setFeedback("⚠️ That move delays mate by " + delay + " moves!", "warn");
+    }
+
+    await botMove();
+  }
+
+  // ---------- the bot's defence ----------
+  async function botMove() {
+    busy = true;
+    const hint = feedbackEl.textContent;
+    optimalEl.textContent = "…";
+    try {
+      const data = await fetchTB(game.fen());            // black to move, losing
+      const best = data.moves && data.moves[0];          // API sorts best-defence first
+      if (!best) { busy = false; return; }
+      game.move({ from: best.uci.slice(0, 2), to: best.uci.slice(2, 4) });
+      render();
+      const next = await fetchTB(game.fen());            // back to white to move
+      setRoot(next);
+      if (hint) setFeedback(hint, feedbackEl.className.replace("feedback ", "")); // keep the user's feedback visible
+    } catch (e) {
+      setFeedback("⚠️ Couldn't reach the endgame tablebase. Check your internet connection.", "bad");
+    }
+    busy = false;
+  }
+
+  // ---------- input: click + drag ----------
+  function onPointerDown(e, square) {
+    if (busy || over) return;
+    e.preventDefault();
+    pendingClick = square;
+    const piece = game.get(square);
+    drag = (piece && piece.color === "w")
+      ? { from: square, moved: false, ghost: null, startX: e.clientX, startY: e.clientY }
+      : null;
+    document.addEventListener("pointermove", onPointerMove);
+    document.addEventListener("pointerup", onPointerUp, { once: true });
+  }
+  function onPointerMove(e) {
+    if (!drag) return;
+    if (!drag.moved) {
+      if (Math.hypot(e.clientX - drag.startX, e.clientY - drag.startY) < 6) return;
+      drag.moved = true; selected = drag.from;
+      drag.ghost = makeGhost(drag.from); document.body.appendChild(drag.ghost); render();
+    }
+    positionGhost(drag.ghost, e.clientX, e.clientY);
+  }
+  function onPointerUp(e) {
+    document.removeEventListener("pointermove", onPointerMove);
+    if (drag && drag.moved) {
+      const target = squareFromPoint(e.clientX, e.clientY);
+      if (drag.ghost) drag.ghost.remove();
+      const from = drag.from; drag = null; selected = null;
+      if (target && target !== from) attemptUserMove(from, target); else render();
+      return;
+    }
+    drag = null;
+    onSquareClick(pendingClick);
+  }
+  function onSquareClick(square) {
+    if (busy || over) return;
+    const piece = game.get(square);
+    if (!selected) { if (piece && piece.color === "w") { selected = square; render(); } return; }
+    if (square === selected) { selected = null; render(); return; }
+    if (piece && piece.color === "w") { selected = square; render(); return; }
+    const from = selected; selected = null;
+    attemptUserMove(from, square);
+  }
+  function makeGhost(square) {
+    const p = game.get(square);
+    const g = document.createElement("span");
+    g.className = "ghost piece " + p.color; g.textContent = GLYPH[p.type];
+    g.style.fontSize = (boardEl.clientWidth / 8 * 0.78) + "px";
+    return g;
+  }
+  function positionGhost(g, x, y) { if (g) { g.style.left = x + "px"; g.style.top = y + "px"; } }
+  function squareFromPoint(x, y) { const el = document.elementFromPoint(x, y); const sq = el && el.closest(".sq"); return sq ? sq.dataset.square : null; }
+
+  // ---------- boot ----------
+  async function init() {
+    if (typeof Chess === "undefined") {
+      setFeedback("⚠️ The chess library didn't load. Check your internet connection.", "bad");
+      return;
+    }
+    game = new Chess(START_FEN);
+    selected = null; drag = null; over = false; userMoves = 0; busy = true;
+    moveCountEl.textContent = "0";
+    render();
+    setFeedback("Connecting to the endgame tablebase…", "info");
+    try {
+      const data = await fetchTB(game.fen());
+      optimalStart = data.dtm != null ? platesToMoves(data.dtm) : null;
+      setRoot(data);
+      setFeedback("Your move — checkmate the black king. ♛", "info");
+    } catch (e) {
+      setFeedback("⚠️ Couldn't reach the endgame tablebase. Check your internet connection.", "bad");
+      return;
+    }
+    busy = false;
+  }
+
+  document.getElementById("reset").addEventListener("click", init);
+  init();
+</script>
+</body>
+</html>

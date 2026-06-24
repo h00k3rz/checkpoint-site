@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Chess Trainer — Pawn Path</title>
+<style>
+  :root {
+    --light-sq: #eeeed2;
+    --dark-sq: #769656;
+    --highlight: #f6f669;
+    --good: #6dbf67;
+    --bad: #e06666;
+    --gold: #f3c14b;
+    --ink: #2a2a2a;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+    background: #1f2421; color: #f2f2f2; margin: 0; min-height: 100vh;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    padding: 24px;
+  }
+  .back { position: fixed; top: 16px; left: 16px; color: #9fb0a5; text-decoration: none; font-size: 14px; font-weight: 600; }
+  .back:hover { color: #19c37d; }
+  .card {
+    background: #2c322e; border-radius: 16px; padding: 24px;
+    box-shadow: 0 10px 40px rgba(0,0,0,.4); max-width: 520px; width: 100%;
+  }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  .sub { color: #9fb0a5; font-size: 14px; margin: 0 0 16px; }
+
+  /* progress bar */
+  .progress { display: flex; gap: 6px; margin-bottom: 8px; }
+  .seg { flex: 1; height: 8px; border-radius: 99px; background: #3d453f; transition: background .3s; }
+  .seg.done { background: var(--good); }
+  .seg.current { background: var(--gold); }
+  .progress-label { color:#9fb0a5; font-size:12px; margin-bottom:14px; }
+
+  .prompt {
+    background: #353c37; border-left: 4px solid var(--dark-sq);
+    padding: 10px 14px; border-radius: 8px; margin-bottom: 16px; font-size: 15px;
+  }
+  #board {
+    width: 100%; aspect-ratio: 1 / 1; display: grid;
+    grid-template-columns: repeat(8, 1fr); grid-template-rows: repeat(8, 1fr);
+    border-radius: 8px; overflow: hidden; user-select: none; touch-action: none;
+  }
+  .sq {
+    position: relative; display: flex; align-items: center; justify-content: center;
+    font-size: clamp(28px, 9vw, 52px); line-height: 1; cursor: pointer;
+  }
+  .sq.light { background: var(--light-sq); }
+  .sq.dark  { background: var(--dark-sq); }
+  .sq.sel::after { content:""; position:absolute; inset:0; background:var(--highlight); opacity:.55; }
+  .sq.hint   { box-shadow: inset 0 0 0 5px #4a90d9; }
+  .sq.reveal { box-shadow: inset 0 0 0 5px var(--good); }
+  .piece { position: relative; z-index: 2; cursor: grab; }
+  .piece.w { color: #ffffff; text-shadow: 0 0 1px #000, 0 1px 2px rgba(0,0,0,.45); }
+  .piece.b { color: var(--ink); text-shadow: 0 1px 1px rgba(255,255,255,.15); }
+  .ghost { position: fixed; z-index: 999; pointer-events: none; transform: translate(-50%, -50%); line-height: 1; }
+  .coord { position: absolute; z-index: 3; font-size: 10px; font-weight: 700; opacity: .55; pointer-events: none; }
+  .coord.file { right: 3px; bottom: 1px; }
+  .coord.rank { left: 3px; top: 1px; }
+
+  .feedback { margin-top: 16px; min-height: 24px; font-weight: 600; text-align: center; font-size: 16px; }
+  .feedback.good { color: var(--good); }
+  .feedback.bad  { color: var(--bad); }
+  .row { display:flex; gap:10px; margin-top:14px; justify-content:center; }
+  button {
+    background: var(--dark-sq); color:#fff; border:0; padding:10px 18px;
+    border-radius: 8px; font-size:14px; cursor:pointer; font-weight:600;
+  }
+  button.ghost-btn { background:#3d453f; }
+  button:disabled { opacity:.4; cursor:default; }
+
+  /* badge / finish screen */
+  .finish { text-align:center; padding: 10px 0 4px; }
+  .medal {
+    width: 130px; height: 130px; margin: 6px auto 14px; border-radius: 50%;
+    background: radial-gradient(circle at 35% 30%, #ffe39a, var(--gold) 55%, #c9961f);
+    display:flex; align-items:center; justify-content:center;
+    font-size: 64px; color:#5b3d05;
+    box-shadow: 0 0 0 8px rgba(243,193,75,.2), 0 10px 30px rgba(0,0,0,.45);
+    animation: pop .5s ease;
+  }
+  @keyframes pop { 0%{ transform:scale(.4); opacity:0 } 70%{ transform:scale(1.08) } 100%{ transform:scale(1); opacity:1 } }
+  .finish h2 { margin: 0 0 6px; font-size: 22px; }
+  .finish p { color:#9fb0a5; margin: 0 0 18px; }
+</style>
+</head>
+<body>
+  <a class="back" href="../index.html">‹ Checkpoint</a>
+  <div class="card">
+    <h1>♟ Chess Trainer</h1>
+    <p class="sub">Learning path · <strong>Pawn level</strong> · Basic tactics</p>
+
+    <div class="progress" id="progress"></div>
+    <div class="progress-label" id="progressLabel"></div>
+
+    <!-- puzzle view -->
+    <div id="play">
+      <div class="prompt" id="prompt"></div>
+      <div id="board"></div>
+      <div class="feedback" id="feedback">&nbsp;</div>
+      <div class="row">
+        <button class="ghost-btn" id="hint">💡 Hint</button>
+        <button class="ghost-btn" id="solution">Show solution</button>
+      </div>
+      <div class="row">
+        <button class="ghost-btn" id="reset">Reset position</button>
+        <button id="next" disabled>Next →</button>
+      </div>
+    </div>
+
+    <!-- finish view -->
+    <div id="finish" class="finish" style="display:none">
+      <div class="medal">♟</div>
+      <h2>Pawn badge unlocked!</h2>
+      <p>You cleared all 4 tactics. Next stop on the path: the <strong>Knight</strong> badge.</p>
+      <div class="row">
+        <button class="ghost-btn" id="restart">Restart path</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+  /* ---------------------------------------------------------------
+     A path = a list of puzzles. Each puzzle = FEN + winning move + texts.
+     This is exactly the data your admin side will manage later.
+  ----------------------------------------------------------------*/
+  const PUZZLES = [
+    { fen: "6k1/5ppp/8/8/8/8/5PPP/3R2K1 w - - 0 1", solution: "d1d8",
+      prompt: "Warm-up — White to move. Checkmate in one.",
+      success: "Rd8# — back-rank mate! ✅" },
+    { fen: "3q3k/6pp/3N4/8/8/8/6PP/6K1 w - - 0 1", solution: "d6f7",
+      prompt: "Knight fork — White to move. Win the queen.",
+      success: "Nf7+ forks king and queen — the queen falls! ✅" },
+    { fen: "6k1/6pp/2n1n3/8/3P4/8/6PP/6K1 w - - 0 1", solution: "d4d5",
+      prompt: "Pawn fork — White to move. Hit both knights at once.",
+      success: "d5! one pawn attacks two knights — you win a piece. ✅" },
+    { fen: "8/8/8/q3k3/8/8/6P1/6KR w - - 0 1", solution: "h1h5",
+      prompt: "Skewer — White to move. Win the queen.",
+      success: "Rh5+ skewers the king; the queen is next. ✅" },
+  ];
+
+  const GLYPH = { k:"♚", q:"♛", r:"♜", b:"♝", n:"♞", p:"♟" };
+  const FILES = "abcdefgh";
+  const boardEl = document.getElementById("board");
+  const feedbackEl = document.getElementById("feedback");
+  const nextBtn = document.getElementById("next");
+
+  let idx;        // current puzzle index
+  let grid;       // grid[r][f] = {type,color} or null ; r=0 is rank 8
+  let selected;   // square selected via click
+  let solved;     // current puzzle solved?
+  let drag;       // active drag or null
+  let pendingClick;
+  let hintSq;     // square to highlight as a hint (the piece to move), or null
+  let revealSq;   // [from, to] highlighted when the solution is shown, or null
+
+  // ---- FEN -> grid ----
+  function parseFen(fen) {
+    const rows = fen.split(" ")[0].split("/");
+    const g = [];
+    for (let r = 0; r < 8; r++) {
+      const out = [];
+      for (const ch of rows[r]) {
+        if (/\d/.test(ch)) { for (let i = 0; i < +ch; i++) out.push(null); }
+        else out.push({ type: ch.toLowerCase(), color: ch === ch.toUpperCase() ? "w" : "b" });
+      }
+      g.push(out);
+    }
+    return g;
+  }
+  function toRC(sq) { return { f: FILES.indexOf(sq[0]), r: 8 - parseInt(sq[1], 10) }; }
+  function pieceAt(sq) { const { r, f } = toRC(sq); return grid[r][f]; }
+
+  // ---- minimal legality (enough for one-move puzzles) ----
+  function isLegal(from, to) {
+    const p = pieceAt(from);
+    if (!p || p.color !== "w") return false;
+    const target = pieceAt(to);
+    if (target && target.color === "w") return false;
+    const a = toRC(from), b = toRC(to);
+    const dr = b.r - a.r, df = b.f - a.f, adr = Math.abs(dr), adf = Math.abs(df);
+    const pathClear = () => {
+      const sR = Math.sign(dr), sF = Math.sign(df);
+      let r = a.r + sR, f = a.f + sF;
+      while (r !== b.r || f !== b.f) { if (grid[r][f]) return false; r += sR; f += sF; }
+      return true;
+    };
+    switch (p.type) {
+      case "n": return (adr === 1 && adf === 2) || (adr === 2 && adf === 1);
+      case "b": return adr === adf && adr > 0 && pathClear();
+      case "r": return ((dr === 0) !== (df === 0)) && pathClear();
+      case "q":
+        if (adr === adf && adr > 0) return pathClear();
+        if ((dr === 0) !== (df === 0)) return pathClear();
+        return false;
+      case "k": return adr <= 1 && adf <= 1 && (adr + adf > 0);
+      case "p":
+        if (df === 0 && dr === -1 && !target) return true;
+        if (df === 0 && dr === -2 && a.r === 6 && !target && !grid[a.r - 1][a.f]) return true;
+        if (adf === 1 && dr === -1 && target && target.color === "b") return true;
+        return false;
+    }
+    return false;
+  }
+
+  // ---- progress bar ----
+  function renderProgress() {
+    const bar = document.getElementById("progress");
+    bar.innerHTML = "";
+    const doneCount = idx + (solved ? 1 : 0);
+    for (let i = 0; i < PUZZLES.length; i++) {
+      const s = document.createElement("div");
+      s.className = "seg" + (i < doneCount ? " done" : (i === idx ? " current" : ""));
+      bar.appendChild(s);
+    }
+    document.getElementById("progressLabel").textContent =
+      "Puzzle " + (idx + 1) + " of " + PUZZLES.length;
+  }
+
+  // ---- board rendering ----
+  function render() {
+    boardEl.innerHTML = "";
+    for (let r = 0; r < 8; r++) {
+      for (let f = 0; f < 8; f++) {
+        const square = FILES[f] + (8 - r);
+        const cell = document.createElement("div");
+        cell.className = "sq " + ((r + f) % 2 === 0 ? "light" : "dark");
+        cell.dataset.square = square;
+        if (selected === square) cell.classList.add("sel");
+        if (hintSq === square) cell.classList.add("hint");
+        if (revealSq && revealSq.includes(square)) cell.classList.add("reveal");
+        const piece = grid[r][f];
+        const hidden = drag && drag.moved && drag.from === square;
+        if (piece && !hidden) {
+          const span = document.createElement("span");
+          span.className = "piece " + piece.color;
+          span.textContent = GLYPH[piece.type];
+          cell.appendChild(span);
+        }
+        if (f === 0) { const c=document.createElement("span"); c.className="coord rank"; c.textContent=8-r; cell.appendChild(c); }
+        if (r === 7) { const c=document.createElement("span"); c.className="coord file"; c.textContent=FILES[f]; cell.appendChild(c); }
+        cell.addEventListener("pointerdown", (e) => onPointerDown(e, square));
+        boardEl.appendChild(cell);
+      }
+    }
+  }
+
+  // ---- move attempt (shared by click + drag) ----
+  function attemptMove(from, to) {
+    if (solved) return;
+    if (!isLegal(from, to)) { setFeedback("That move isn't legal here.", "bad"); render(); return; }
+    if (from + to === PUZZLES[idx].solution) {
+      const a = toRC(from), b = toRC(to);
+      grid[b.r][b.f] = grid[a.r][a.f];
+      grid[a.r][a.f] = null;
+      solved = true;
+      hintSq = null;
+      render();
+      renderProgress();
+      setFeedback(PUZZLES[idx].success, "good");
+      nextBtn.disabled = false;
+      nextBtn.textContent = (idx === PUZZLES.length - 1) ? "Claim badge 🏅" : "Next →";
+    } else {
+      setFeedback("Legal, but not the best move. Try again!", "bad");
+      render();
+    }
+  }
+
+  // ---- click / click ----
+  function onSquareClick(square) {
+    if (solved) return;
+    const piece = pieceAt(square);
+    if (!selected) { if (piece && piece.color === "w") { selected = square; render(); } return; }
+    if (square === selected) { selected = null; render(); return; }
+    if (piece && piece.color === "w") { selected = square; render(); return; }
+    const from = selected; selected = null;
+    attemptMove(from, square);
+  }
+
+  // ---- drag & drop (pointer events: mouse + touch) ----
+  function onPointerDown(e, square) {
+    if (solved) return;
+    e.preventDefault();
+    pendingClick = square;
+    const piece = pieceAt(square);
+    drag = (piece && piece.color === "w")
+      ? { from: square, moved: false, ghost: null, startX: e.clientX, startY: e.clientY }
+      : null;
+    document.addEventListener("pointermove", onPointerMove);
+    document.addEventListener("pointerup", onPointerUp, { once: true });
+  }
+  function onPointerMove(e) {
+    if (!drag) return;
+    if (!drag.moved) {
+      if (Math.hypot(e.clientX - drag.startX, e.clientY - drag.startY) < 6) return;
+      drag.moved = true;
+      selected = drag.from;
+      drag.ghost = makeGhost(drag.from);
+      document.body.appendChild(drag.ghost);
+      render();
+    }
+    positionGhost(drag.ghost, e.clientX, e.clientY);
+  }
+  function onPointerUp(e) {
+    document.removeEventListener("pointermove", onPointerMove);
+    if (drag && drag.moved) {
+      const target = squareFromPoint(e.clientX, e.clientY);
+      if (drag.ghost) drag.ghost.remove();
+      const from = drag.from;
+      drag = null; selected = null;
+      if (target && target !== from) attemptMove(from, target); else render();
+      return;
+    }
+    drag = null;
+    onSquareClick(pendingClick);
+  }
+  function makeGhost(square) {
+    const p = pieceAt(square);
+    const g = document.createElement("span");
+    g.className = "ghost piece " + p.color;
+    g.textContent = GLYPH[p.type];
+    g.style.fontSize = (boardEl.clientWidth / 8 * 0.78) + "px";
+    return g;
+  }
+  function positionGhost(g, x, y) { if (g) { g.style.left = x + "px"; g.style.top = y + "px"; } }
+  function squareFromPoint(x, y) {
+    const el = document.elementFromPoint(x, y);
+    const sq = el && el.closest(".sq");
+    return sq ? sq.dataset.square : null;
+  }
+
+  function setFeedback(text, kind) {
+    feedbackEl.textContent = text;
+    feedbackEl.className = "feedback " + (kind || "");
+  }
+
+  // ---- path flow ----
+  function loadPuzzle(i) {
+    idx = i;
+    grid = parseFen(PUZZLES[i].fen);
+    selected = null; solved = false; drag = null; hintSq = null; revealSq = null;
+    document.getElementById("prompt").textContent = PUZZLES[i].prompt;
+    setFeedback(" ", "");
+    nextBtn.disabled = true;
+    nextBtn.textContent = (i === PUZZLES.length - 1) ? "Claim badge 🏅" : "Next →";
+    render();
+    renderProgress();
+  }
+  function resetCurrent() {
+    grid = parseFen(PUZZLES[idx].fen);
+    selected = null; solved = false; drag = null; hintSq = null; revealSq = null;
+    setFeedback(" ", "");
+    nextBtn.disabled = true;
+    render(); renderProgress();
+  }
+  function goNext() {
+    if (!solved) return;
+    if (idx < PUZZLES.length - 1) { loadPuzzle(idx + 1); }
+    else { showFinish(); }
+  }
+  function showFinish() {
+    document.getElementById("play").style.display = "none";
+    document.getElementById("finish").style.display = "block";
+    // fill the whole bar
+    idx = PUZZLES.length - 1; solved = true; renderProgress();
+    document.getElementById("progressLabel").textContent = "Path complete — 4 of 4 ✓";
+  }
+  function restart() {
+    document.getElementById("finish").style.display = "none";
+    document.getElementById("play").style.display = "block";
+    loadPuzzle(0);
+  }
+
+  // ---- hint: highlight the piece that should move (not its destination) ----
+  function showHint() {
+    if (solved) return;
+    hintSq = PUZZLES[idx].solution.slice(0, 2);
+    setFeedback("Hint: move the highlighted piece.", "");
+    render();
+  }
+  // ---- show solution: play the winning move and reveal both squares ----
+  function showSolution() {
+    if (solved) return;
+    const sol = PUZZLES[idx].solution;
+    const from = sol.slice(0, 2), to = sol.slice(2, 4);
+    const a = toRC(from), b = toRC(to);
+    grid[b.r][b.f] = grid[a.r][a.f];
+    grid[a.r][a.f] = null;
+    hintSq = null; revealSq = [from, to]; solved = true; selected = null;
+    render();
+    renderProgress();
+    setFeedback("Solution: " + from + " → " + to + ".", "");
+    nextBtn.disabled = false;
+    nextBtn.textContent = (idx === PUZZLES.length - 1) ? "Claim badge 🏅" : "Next →";
+  }
+
+  nextBtn.addEventListener("click", goNext);
+  document.getElementById("hint").addEventListener("click", showHint);
+  document.getElementById("solution").addEventListener("click", showSolution);
+  document.getElementById("reset").addEventListener("click", resetCurrent);
+  document.getElementById("restart").addEventListener("click", restart);
+  loadPuzzle(0);
+</script>
+</body>
+</html>
