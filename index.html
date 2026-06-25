@@ -118,6 +118,7 @@
       <p class="sub">Most players plateau because they practice at random. Checkpoint is a master's path that ranks your chess by piece — Pawn to King — so you stop guessing and start climbing, rank by rank.</p>
       <div class="ctas">
         <button class="btn lichess" id="connectHero">♞ Connect with Lichess</button>
+        <a class="btn primary" id="pathHero" href="path.html" style="display:none">Go to your Path →</a>
         <a class="btn ghost" href="train/tactics.html">Just start training</a>
       </div>
       <div class="connect-why" id="connectWhy">
@@ -247,9 +248,10 @@
     document.getElementById("connectNav").style.display = "none";
     const hero = document.getElementById("connectHero"); if (hero) hero.style.display = "none";
     const why = document.getElementById("connectWhy"); if (why) why.style.display = "none";
+    const pathHero = document.getElementById("pathHero"); if (pathHero) pathHero.style.display = "inline-block";
     const chip = document.getElementById("userChip");
     chip.style.display = "inline-flex";
-    chip.innerHTML = "@" + acc.username + ' <a href="#" id="logout">Log out</a>';
+    chip.innerHTML = "@" + acc.username + ' · <a href="path.html" id="mypath">My Path</a> · <a href="#" id="logout">Log out</a>';
     document.getElementById("logout").onclick = function (e) {
       e.preventDefault(); localStorage.removeItem(LS_KEY); location.reload();
     };
@@ -310,7 +312,8 @@
       const acc = await fetch(LICHESS + "/api/account", { headers: { Authorization: "Bearer " + tok.access_token } }).then(function (r) { return r.json(); });
       const data = { token: tok.access_token, username: acc.username, id: acc.id, perfs: acc.perfs };
       localStorage.setItem(LS_KEY, JSON.stringify(data));
-      setConnected(data);
+      location.href = "path.html";   // straight to The Path after logging in
+      return;
     } catch (e) {
       console.warn("Lichess login failed", e);
     } finally {

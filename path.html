@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Checkpoint — Your Path</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{ --ink:#14181d; --surface:#1e232b; --line:#2b323b; --green:#19c37d; --offwhite:#e9eef3; --gold:#f3c14b; --muted:#9aa6b2; }
+  *{ box-sizing:border-box; }
+  body{ font-family:"Inter",sans-serif; background:var(--ink); color:var(--offwhite); margin:0; }
+  a{ color:inherit; text-decoration:none; }
+  .wrap{ max-width:680px; margin:0 auto; padding:18px; }
+  /* nav */
+  nav{ display:flex; align-items:center; gap:12px; margin-bottom:8px; }
+  .brand{ display:flex; align-items:center; gap:9px; font-family:"Space Grotesk"; font-weight:700; font-size:19px; }
+  .brand .gg{ color:var(--green); }
+  .navspace{ flex:1; }
+  .userchip{ display:inline-flex; align-items:center; gap:8px; font-family:"Space Grotesk"; font-weight:600; font-size:13.5px; background:var(--surface); border:1px solid var(--line); border-radius:10px; padding:7px 11px; }
+  .userchip a{ color:var(--muted); font-weight:500; font-size:13px; }
+  .userchip a:hover{ color:var(--green); }
+  .btn{ font-family:"Space Grotesk"; font-weight:600; border:0; border-radius:10px; padding:11px 18px; font-size:15px; cursor:pointer; display:inline-block; }
+  .btn.primary{ background:var(--green); color:#06281b; }
+  .btn.ghost{ background:transparent; color:var(--offwhite); border:1px solid var(--line); }
+  /* header summary */
+  h1{ font-family:"Space Grotesk"; font-weight:700; font-size:26px; letter-spacing:-.01em; margin:18px 0 4px; }
+  .yousub{ color:var(--muted); font-size:14px; margin:0 0 18px; }
+  /* "up next" banner */
+  .upnext{ background:var(--surface); border:1px solid var(--line); border-left:3px solid var(--green); border-radius:16px; padding:18px; display:flex; align-items:center; gap:16px; margin-bottom:22px; }
+  .upnext .ico{ width:54px; height:54px; border-radius:12px; background:var(--ink); border:1px solid var(--line); display:flex; align-items:center; justify-content:center; flex:0 0 auto; }
+  .upnext .ico img{ width:78%; height:78%; object-fit:contain; }
+  .upnext .meta{ flex:1; min-width:0; }
+  .upnext .k{ font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--green); font-weight:700; }
+  .upnext .t{ font-family:"Space Grotesk"; font-weight:700; font-size:17px; margin:3px 0 0; }
+  /* stages list */
+  h2{ font-family:"Space Grotesk"; font-weight:700; font-size:12px; letter-spacing:.14em; text-transform:uppercase; color:var(--muted); margin:0 0 12px; }
+  .stage{ background:var(--surface); border:1px solid var(--line); border-radius:16px; padding:16px; margin-bottom:12px; }
+  .stage.open{ border-color:rgba(25,195,125,.45); }
+  .stage.soon{ opacity:.6; }
+  .stagehead{ display:flex; align-items:center; gap:14px; }
+  .ptile{ width:48px; height:48px; border-radius:12px; background:var(--ink); border:1px solid var(--line); display:flex; align-items:center; justify-content:center; flex:0 0 auto; }
+  .ptile img{ width:78%; height:78%; object-fit:contain; }
+  .stage.soon .ptile img{ filter:grayscale(1) brightness(.8); }
+  .ptile.king{ border-color:var(--gold); }
+  .stage .name{ font-family:"Space Grotesk"; font-weight:700; font-size:18px; }
+  .stage .role{ font-size:12.5px; color:var(--muted); margin-top:2px; }
+  .badge{ margin-left:auto; font-size:11px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; padding:5px 10px; border-radius:99px; }
+  .badge.open{ color:var(--green); background:rgba(25,195,125,.12); border:1px solid rgba(25,195,125,.3); }
+  .badge.soon{ color:var(--muted); background:var(--ink); border:1px solid var(--line); }
+  /* lessons inside an open stage */
+  .lessons{ margin-top:14px; display:flex; flex-direction:column; gap:9px; }
+  .lesson{ display:flex; align-items:center; gap:12px; background:var(--ink); border:1px solid var(--line); border-radius:12px; padding:12px 14px; transition:border-color .15s, transform .15s; }
+  .lesson:hover{ border-color:var(--green); transform:translateY(-1px); }
+  .lesson .ltag{ font-size:10px; font-weight:700; letter-spacing:.07em; text-transform:uppercase; color:var(--green); }
+  .lesson .lt{ font-weight:600; font-size:14.5px; }
+  .lesson .go{ margin-left:auto; color:var(--green); font-weight:700; font-size:14px; flex:0 0 auto; }
+  .soonnote{ margin-top:12px; font-size:13px; color:var(--muted); }
+  /* not-connected prompt */
+  .gate{ text-align:center; background:var(--surface); border:1px solid var(--line); border-radius:18px; padding:34px 22px; margin-top:24px; }
+  .gate h3{ font-family:"Space Grotesk"; font-weight:700; font-size:20px; margin:0 0 8px; }
+  .gate p{ color:var(--muted); font-size:14px; margin:0 0 18px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <nav>
+    <a class="brand" href="index.html">
+      <svg width="30" height="30" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" aria-label="Checkpoint">
+        <defs><clipPath id="navlogo"><rect x="2" y="2" width="96" height="96" rx="24"/></clipPath></defs>
+        <g clip-path="url(#navlogo)"><rect x="2" y="2" width="96" height="96" fill="#1e232b"/></g>
+        <rect x="2" y="2" width="96" height="96" rx="24" fill="none" stroke="#2b323b" stroke-width="1.5"/>
+        <path d="M24 55 L43 74 L79 27" fill="none" stroke="#19c37d" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <span>checkpoint<span class="gg">.gg</span></span>
+    </a>
+    <div class="navspace"></div>
+    <span class="userchip" id="userChip" style="display:none"></span>
+  </nav>
+
+  <!-- shown when the player is connected -->
+  <div id="pathView" style="display:none">
+    <h1 id="hello">Your Path</h1>
+    <p class="yousub" id="yousub"></p>
+
+    <div class="upnext">
+      <div class="ico"><img src="https://chessboardjs.com/img/chesspieces/wikipedia/wP.png" alt=""></div>
+      <div class="meta">
+        <div class="k">Up next</div>
+        <div class="t">Pawn — Tactics: forks, pins &amp; back-rank mate</div>
+      </div>
+      <a class="btn primary" href="train/tactics.html">Start →</a>
+    </div>
+
+    <h2>The path — Pawn to King</h2>
+    <div id="stages"></div>
+  </div>
+
+  <!-- shown when nobody is connected -->
+  <div id="gateView" class="gate" style="display:none">
+    <h3>Connect to see your Path</h3>
+    <p>Your Path places you on the ladder from your real Lichess rating and shows your next lesson.</p>
+    <a class="btn primary" href="index.html">♞ Connect with Lichess</a>
+  </div>
+
+</div>
+
+<script>
+(function () {
+  const LS_KEY = "checkpoint_lichess";
+  const PBASE = "https://chessboardjs.com/img/chesspieces/wikipedia/";
+
+  // The ladder. Pawn is open (existing lessons); the rest are placeholders.
+  const STAGES = [
+    { rank: "Pawn", img: "wP", role: "Tactics & first checkmates", status: "open", lessons: [
+        { tag: "Lesson",  title: "Tactics — forks, pins & back-rank mate", href: "train/tactics.html" },
+        { tag: "Endgame", title: "Checkmate: King + Queen vs King",        href: "train/kqk.html" },
+    ]},
+    { rank: "Knight", img: "wN", role: "Coordination & outposts", status: "soon" },
+    { rank: "Bishop", img: "wB", role: "Diagonals & the two bishops", status: "soon" },
+    { rank: "Rook",   img: "wR", role: "Open files & rook endgames", status: "soon" },
+    { rank: "Queen",  img: "wQ", role: "Attack & calculation", status: "soon" },
+    { rank: "King",   img: "wK", role: "Mastery", status: "soon" },
+  ];
+
+  // rating -> rank (same thresholds as the landing page)
+  const RANKS = [
+    { min: 0, name: "Pawn" }, { min: 1000, name: "Knight" }, { min: 1150, name: "Bishop" },
+    { min: 1300, name: "Rook" }, { min: 1450, name: "Queen" }, { min: 1600, name: "King" },
+  ];
+  function rankName(r) { let n = "Pawn"; for (const x of RANKS) if (r >= x.min) n = x.name; return n; }
+  function pickRating(perfs) {
+    const order = ["rapid", "blitz", "classical", "bullet"];
+    for (const k of order) { const p = perfs && perfs[k]; if (p && p.games > 0 && !p.prov) return { key: k, rating: p.rating }; }
+    for (const k of order) { const p = perfs && perfs[k]; if (p && p.rating) return { key: k, rating: p.rating }; }
+    return null;
+  }
+
+  function renderStages() {
+    const host = document.getElementById("stages");
+    host.innerHTML = STAGES.map(function (s) {
+      const isOpen = s.status === "open";
+      const badge = isOpen
+        ? '<span class="badge open">Open</span>'
+        : '<span class="badge soon">Soon</span>';
+      let lessons = "";
+      if (isOpen) {
+        lessons = '<div class="lessons">' + s.lessons.map(function (l) {
+          return '<a class="lesson" href="' + l.href + '">' +
+                   '<div><div class="ltag">' + l.tag + '</div><div class="lt">' + l.title + '</div></div>' +
+                   '<span class="go">Start →</span></a>';
+        }).join("") + '</div>';
+      } else {
+        lessons = '<div class="soonnote">Lessons for this rank are coming soon.</div>';
+      }
+      return '<div class="stage ' + (isOpen ? "open" : "soon") + '">' +
+               '<div class="stagehead">' +
+                 '<div class="ptile' + (s.rank === "King" ? " king" : "") + '"><img src="' + PBASE + s.img + '.png" alt=""></div>' +
+                 '<div><div class="name">' + s.rank + '</div><div class="role">' + s.role + '</div></div>' +
+                 badge +
+               '</div>' + lessons +
+             '</div>';
+    }).join("");
+  }
+
+  function boot() {
+    const saved = localStorage.getItem(LS_KEY);
+    if (!saved) { document.getElementById("gateView").style.display = "block"; return; }
+    let acc; try { acc = JSON.parse(saved); } catch (e) { document.getElementById("gateView").style.display = "block"; return; }
+
+    document.getElementById("pathView").style.display = "block";
+
+    const chip = document.getElementById("userChip");
+    chip.style.display = "inline-flex";
+    chip.innerHTML = "@" + acc.username + ' <a href="#" id="logout">Log out</a>';
+    document.getElementById("logout").onclick = function (e) {
+      e.preventDefault(); localStorage.removeItem(LS_KEY); location.href = "index.html";
+    };
+
+    document.getElementById("hello").textContent = "Welcome, " + acc.username;
+    const r = pickRating(acc.perfs);
+    if (r) {
+      const rk = rankName(r.rating);
+      document.getElementById("yousub").textContent =
+        "Your Lichess " + r.key + " rating is " + r.rating + " — that's a " + rk +
+        " on Checkpoint. Lessons roll out from Pawn up, so start here while we build your rank's path.";
+    } else {
+      document.getElementById("yousub").textContent =
+        "Welcome to your Path. Lessons roll out from Pawn up — start here.";
+    }
+
+    renderStages();
+  }
+
+  boot();
+})();
+</script>
+</body>
+</html>
