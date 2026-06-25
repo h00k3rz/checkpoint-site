@@ -57,6 +57,21 @@
   .lesson .lt{ font-weight:600; font-size:14.5px; }
   .lesson .go{ margin-left:auto; color:var(--green); font-weight:700; font-size:14px; flex:0 0 auto; }
   .soonnote{ margin-top:12px; font-size:13px; color:var(--muted); }
+  /* star sub-levels (accordion) inside an open rank */
+  .levels{ margin-top:14px; display:flex; flex-direction:column; gap:8px; }
+  .level{ border:1px solid var(--line); border-radius:12px; background:var(--ink); }
+  .level.cur{ border-color:rgba(25,195,125,.4); }
+  .lvhead{ display:flex; align-items:center; gap:10px; padding:12px 14px; cursor:pointer; user-select:none; }
+  .lvstars{ font-size:14px; letter-spacing:3px; color:var(--gold); flex:0 0 auto; }
+  .lvstars .e{ color:#3a424c; }
+  .lvtitle{ font-family:"Space Grotesk"; font-weight:700; font-size:15px; }
+  .lvbadge{ margin-left:auto; font-size:11px; font-weight:700; letter-spacing:.05em; text-transform:uppercase; color:var(--green); }
+  .chev{ margin-left:8px; color:var(--muted); transition:transform .2s; font-size:18px; line-height:1; }
+  .level:not(.cur) .chev{ margin-left:auto; }
+  .level.open .chev{ transform:rotate(90deg); }
+  .lvbody{ display:none; padding:0 14px 14px; }
+  .level.open .lvbody{ display:block; }
+  .lvbody .lessons{ margin-top:0; }
   /* not-connected prompt */
   .gate{ text-align:center; background:var(--surface); border:1px solid var(--line); border-radius:18px; padding:34px 22px; margin-top:24px; }
   .gate h3{ font-family:"Space Grotesk"; font-weight:700; font-size:20px; margin:0 0 8px; }
@@ -114,9 +129,13 @@
 
   // The ladder. Pawn is open (existing lessons); the rest are placeholders.
   const STAGES = [
-    { rank: "Pawn", img: "wP", role: "Tactics & first checkmates", status: "open", lessons: [
-        { tag: "Lesson",  title: "Tactics — forks, pins & back-rank mate", href: "train/tactics.html" },
-        { tag: "Endgame", title: "Checkmate: King + Queen vs King",        href: "train/kqk.html" },
+    { rank: "Pawn", img: "wP", role: "Tactics & first checkmates", status: "open", current: 0, levels: [
+        { stars: 1, title: "Pawn I", lessons: [
+            { tag: "Lesson",  title: "Tactics — forks, pins & back-rank mate", href: "train/tactics.html" },
+            { tag: "Endgame", title: "Checkmate: King + Queen vs King",        href: "train/kqk.html" },
+        ]},
+        { stars: 2, title: "Pawn II", lessons: [] },
+        { stars: 3, title: "Pawn III", lessons: [] },
     ]},
     { rank: "Knight", img: "wN", role: "Coordination & outposts", status: "soon" },
     { rank: "Bishop", img: "wB", role: "Diagonals & the two bishops", status: "soon" },
@@ -138,6 +157,22 @@
     return null;
   }
 
+  function starStr(n) {
+    let s = "";
+    for (let i = 1; i <= 3; i++) s += i <= n ? "★" : '<span class="e">☆</span>';
+    return s;
+  }
+  function lessonsHTML(lessons) {
+    if (lessons && lessons.length) {
+      return '<div class="lessons">' + lessons.map(function (l) {
+        return '<a class="lesson" href="' + l.href + '">' +
+                 '<div><div class="ltag">' + l.tag + '</div><div class="lt">' + l.title + '</div></div>' +
+                 '<span class="go">Start →</span></a>';
+      }).join("") + '</div>';
+    }
+    return '<div class="soonnote">More lessons for this level are coming soon.</div>';
+  }
+
   function renderStages() {
     const host = document.getElementById("stages");
     host.innerHTML = STAGES.map(function (s) {
@@ -145,24 +180,37 @@
       const badge = isOpen
         ? '<span class="badge open">Open</span>'
         : '<span class="badge soon">Soon</span>';
-      let lessons = "";
-      if (isOpen) {
-        lessons = '<div class="lessons">' + s.lessons.map(function (l) {
-          return '<a class="lesson" href="' + l.href + '">' +
-                   '<div><div class="ltag">' + l.tag + '</div><div class="lt">' + l.title + '</div></div>' +
-                   '<span class="go">Start →</span></a>';
+      let body = "";
+      if (isOpen && s.levels) {
+        // three star sub-levels; only the one the player is in starts expanded
+        body = '<div class="levels">' + s.levels.map(function (lv, i) {
+          const cur = i === s.current;
+          return '<div class="level' + (cur ? " cur open" : "") + '">' +
+                   '<div class="lvhead">' +
+                     '<span class="lvstars">' + starStr(lv.stars) + '</span>' +
+                     '<span class="lvtitle">' + lv.title + '</span>' +
+                     (cur ? '<span class="lvbadge">You are here</span>' : "") +
+                     '<span class="chev">›</span>' +
+                   '</div>' +
+                   '<div class="lvbody">' + lessonsHTML(lv.lessons) + '</div>' +
+                 '</div>';
         }).join("") + '</div>';
       } else {
-        lessons = '<div class="soonnote">Lessons for this rank are coming soon.</div>';
+        body = '<div class="soonnote">Lessons for this rank are coming soon.</div>';
       }
       return '<div class="stage ' + (isOpen ? "open" : "soon") + '">' +
                '<div class="stagehead">' +
                  '<div class="ptile' + (s.rank === "King" ? " king" : "") + '"><img src="' + PBASE + s.img + '.png" alt=""></div>' +
                  '<div><div class="name">' + s.rank + '</div><div class="role">' + s.role + '</div></div>' +
                  badge +
-               '</div>' + lessons +
+               '</div>' + body +
              '</div>';
     }).join("");
+
+    // expand / collapse a star level on tap
+    host.querySelectorAll(".lvhead").forEach(function (h) {
+      h.addEventListener("click", function () { h.parentNode.classList.toggle("open"); });
+    });
   }
 
   function boot() {
