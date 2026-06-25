@@ -44,9 +44,8 @@
   .sq.light { background: var(--light-sq); }
   .sq.dark  { background: var(--dark-sq); }
   .sq.sel::after { content:""; position:absolute; inset:0; background:var(--highlight); opacity:.55; }
-  .piece { position: relative; z-index: 2; cursor: grab; }
-  .piece.w { color: #ffffff; text-shadow: 0 0 1px #000, 0 1px 2px rgba(0,0,0,.45); }
-  .piece.b { color: var(--ink); text-shadow: 0 1px 1px rgba(255,255,255,.15); }
+  .piece { width: 90%; height: 90%; object-fit: contain; pointer-events: none; -webkit-user-drag: none; position: relative; z-index: 2; }
+  .glyph { position: relative; z-index: 2; line-height: 1; }
   .ghost { position: fixed; z-index: 999; pointer-events: none; transform: translate(-50%, -50%); line-height: 1; }
   .coord { position: absolute; z-index: 3; font-size: 10px; font-weight: 700; opacity: .55; pointer-events: none; }
   .coord.file { right: 3px; bottom: 1px; }
@@ -92,6 +91,8 @@
   const GLYPH = { k:"♚", q:"♛", r:"♜", b:"♝", n:"♞", p:"♟" };
   const FILES = "abcdefgh";
   const TB_URL = "https://tablebase.lichess.ovh/standard?fen=";
+  const PBASE = "https://chessboardjs.com/img/chesspieces/wikipedia/";
+  const pieceSrc = (p) => PBASE + p.color + p.type.toUpperCase() + ".png";
 
   const boardEl = document.getElementById("board");
   const feedbackEl = document.getElementById("feedback");
@@ -151,10 +152,10 @@
         const piece = board[r][f];
         const hidden = drag && drag.moved && drag.from === square;
         if (piece && !hidden) {
-          const span = document.createElement("span");
-          span.className = "piece " + piece.color;
-          span.textContent = GLYPH[piece.type];
-          cell.appendChild(span);
+          const img = document.createElement("img");
+          img.className = "piece"; img.src = pieceSrc(piece); img.draggable = false; img.alt = "";
+          img.onerror = () => { const sp = document.createElement("span"); sp.className = "glyph"; sp.style.cssText = "font-size:clamp(28px,9vw,52px);color:" + (piece.color === "w" ? "#fafafa" : "#2c2c2c"); sp.textContent = GLYPH[piece.type]; img.replaceWith(sp); };
+          cell.appendChild(img);
         }
         if (f === 0) { const c=document.createElement("span"); c.className="coord rank"; c.textContent=8-r; cell.appendChild(c); }
         if (r === 7) { const c=document.createElement("span"); c.className="coord file"; c.textContent=FILES[f]; cell.appendChild(c); }
@@ -268,9 +269,9 @@
   }
   function makeGhost(square) {
     const p = game.get(square);
-    const g = document.createElement("span");
-    g.className = "ghost piece " + p.color; g.textContent = GLYPH[p.type];
-    g.style.fontSize = (boardEl.clientWidth / 8 * 0.78) + "px";
+    const g = document.createElement("img");
+    g.className = "ghost"; g.src = pieceSrc(p); g.draggable = false; g.alt = "";
+    const w = boardEl.clientWidth / 8 * 0.9; g.style.width = w + "px"; g.style.height = w + "px";
     return g;
   }
   function positionGhost(g, x, y) { if (g) { g.style.left = x + "px"; g.style.top = y + "px"; } }
