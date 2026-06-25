@@ -22,6 +22,16 @@
   .btn{ font-family:"Space Grotesk"; font-weight:500; border:0; border-radius:10px; padding:11px 18px; font-size:15px; cursor:pointer; display:inline-block; }
   .btn.primary{ background:var(--green); color:#06281b; }
   .btn.ghost{ background:transparent; color:var(--offwhite); border:1px solid var(--line); }
+  .btn.lichess{ background:var(--green); color:#06281b; }
+  /* connected user chip */
+  .userchip{ display:inline-flex; align-items:center; gap:8px; font-family:"Space Grotesk"; font-weight:600; font-size:14px; color:var(--offwhite); background:var(--surface); border:1px solid var(--line); border-radius:10px; padding:8px 12px; }
+  .userchip a{ color:var(--muted); font-weight:500; font-size:13px; text-decoration:none; }
+  .userchip a:hover{ color:var(--green); }
+  /* "why connect" callout */
+  .connect-why{ background:var(--surface); border:1px solid var(--line); border-left:3px solid var(--green); border-radius:14px; padding:16px 18px; margin:18px 0 0; max-width:520px; }
+  .connect-why strong{ font-family:"Space Grotesk"; font-size:15px; }
+  .connect-why ul{ margin:10px 0 8px; padding-left:18px; color:#cdd6df; font-size:14px; line-height:1.55; }
+  .connect-why .muted-note{ color:var(--muted); font-size:12.5px; }
   .pill{ display:inline-block; font-size:12px; color:var(--green); background:rgba(25,195,125,.12); border:1px solid rgba(25,195,125,.3); border-radius:99px; padding:4px 12px; font-weight:600; }
   /* hero */
   .hero{ display:grid; grid-template-columns:1.15fr .85fr; gap:30px; align-items:center; margin:34px 0 10px; }
@@ -97,7 +107,8 @@
     </a>
     <div class="navspace"></div>
     <a class="btn ghost" href="#train">Train</a>
-    <a class="btn primary" href="train/tactics.html">Start free</a>
+    <button class="btn lichess" id="connectNav">♞ Connect</button>
+    <span class="userchip" id="userChip" style="display:none"></span>
   </nav>
 
   <section class="hero">
@@ -106,13 +117,24 @@
       <h1 style="margin-top:14px;">Earn your way to the <span class="g">next rank.</span></h1>
       <p class="sub">Most players plateau because they practice at random. Checkpoint is a master's path that ranks your chess by piece — Pawn to King — so you stop guessing and start climbing, rank by rank.</p>
       <div class="ctas">
-        <a class="btn primary" href="train/tactics.html">Start your path — free</a>
+        <button class="btn lichess" id="connectHero">♞ Connect with Lichess</button>
+        <a class="btn ghost" href="train/tactics.html">Just start training</a>
+      </div>
+      <div class="connect-why" id="connectWhy">
+        <strong>Connect with Lichess — the best way to use Checkpoint.</strong>
+        <ul>
+          <li>We read your <em>real</em> Lichess rating and place you on the ladder instantly — no guessing your level.</li>
+          <li>Your rank and progress are tied to your account.</li>
+          <li>One click into the weekly <em>Checkpoint Cup</em>.</li>
+        </ul>
+        <span class="muted-note">No new password. We never see your password — Lichess handles it, and we only read your public profile.</span>
       </div>
       <p class="auth">Built by Masters — for future masters · The Checkpoint Cup every week.</p>
     </div>
 
-    <!-- the learner is the hero: their rank (a chess piece) on screen -->
-    <div class="card">
+    <!-- the learner is the hero: their rank (a chess piece) on screen.
+         When connected, this whole card is rewritten with the real Lichess rating. -->
+    <div class="card" id="beltCard">
       <div class="belthead">
         <div class="ptile cur" style="width:50px;height:50px;"><img src="https://chessboardjs.com/img/chesspieces/wikipedia/wB.png" alt=""></div>
         <div>
@@ -177,5 +199,132 @@
   </div>
 
 </div>
+
+<script>
+/* ---------------------------------------------------------------------------
+   "Connect with Lichess" — OAuth2 PKCE, fully client-side.
+   No server, no secret, no app registration (per Lichess's public-client flow).
+   We only read the public profile (username + ratings) to place the player
+   on the Pawn->King ladder. The token lives in this browser only.
+---------------------------------------------------------------------------- */
+(function () {
+  const LICHESS = "https://lichess.org";
+  const REDIRECT_URI = location.origin + "/";
+  const CLIENT_ID = location.origin + "/";        // arbitrary public identifier
+  const LS_KEY = "checkpoint_lichess";
+  const PBASE = "https://chessboardjs.com/img/chesspieces/wikipedia/";
+
+  // ---- PKCE helpers ----
+  function b64url(bytes) {
+    return btoa(String.fromCharCode.apply(null, new Uint8Array(bytes)))
+      .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  }
+  function randomString(n) { const a = new Uint8Array(n); crypto.getRandomValues(a); return b64url(a); }
+  async function challenge(verifier) {
+    const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier));
+    return b64url(digest);
+  }
+
+  // ---- rating -> rank (thresholds align with the ladder on this page; easy to tune) ----
+  const RANKS = [
+    { min: 0,    name: "Pawn",   img: "wP" },
+    { min: 1000, name: "Knight", img: "wN" },
+    { min: 1150, name: "Bishop", img: "wB" },
+    { min: 1300, name: "Rook",   img: "wR" },
+    { min: 1450, name: "Queen",  img: "wQ" },
+    { min: 1600, name: "King",   img: "wK" },
+  ];
+  function rankIndex(r) { let i = 0; for (let k = 0; k < RANKS.length; k++) if (r >= RANKS[k].min) i = k; return i; }
+  function pickRating(perfs) {
+    const order = ["rapid", "blitz", "classical", "bullet"];
+    for (const k of order) { const p = perfs && perfs[k]; if (p && p.games > 0 && !p.prov) return { key: k, rating: p.rating }; }
+    for (const k of order) { const p = perfs && perfs[k]; if (p && p.rating) return { key: k, rating: p.rating }; }
+    return null;
+  }
+
+  // ---- UI ----
+  function setConnected(acc) {
+    document.getElementById("connectNav").style.display = "none";
+    const hero = document.getElementById("connectHero"); if (hero) hero.style.display = "none";
+    const why = document.getElementById("connectWhy"); if (why) why.style.display = "none";
+    const chip = document.getElementById("userChip");
+    chip.style.display = "inline-flex";
+    chip.innerHTML = "@" + acc.username + ' <a href="#" id="logout">Log out</a>';
+    document.getElementById("logout").onclick = function (e) {
+      e.preventDefault(); localStorage.removeItem(LS_KEY); location.reload();
+    };
+    renderBelt(acc);
+  }
+  function renderBelt(acc) {
+    const card = document.getElementById("beltCard"); if (!card) return;
+    const r = pickRating(acc.perfs);
+    const rating = r ? r.rating : null;
+    const idx = rating != null ? rankIndex(rating) : 0;
+    const rank = RANKS[idx], next = RANKS[idx + 1];
+    let pct = 100;
+    if (next && rating != null) { const span = next.min - rank.min; pct = Math.max(4, Math.min(100, Math.round(((rating - rank.min) / span) * 100))); }
+    const ladder = RANKS.map(function (R, i) {
+      const cls = i === idx ? "cur" : (i > idx ? "lock" : "");
+      return '<div class="ptile ' + cls + (R.name === "King" ? " king" : "") + '" title="' + R.name + '"><img src="' + PBASE + R.img + '.png" alt=""></div>';
+    }).join("");
+    card.innerHTML =
+      '<div class="belthead">' +
+        '<div class="ptile cur" style="width:50px;height:50px;"><img src="' + PBASE + rank.img + '.png" alt=""></div>' +
+        '<div><div class="who">@' + acc.username + (r ? " · " + r.key : "") + '</div>' +
+        '<div class="rank">' + rank.name + (rating != null ? " · " + rating : "") + '</div></div>' +
+      '</div>' +
+      '<div class="progress"><span style="width:' + pct + '%"></span></div>' +
+      '<div class="nextrow"><span>' + (next ? pct + "% to " + next.name : "Top rank reached 👑") + '</span><span>' + (next ? "next rank" : "") + '</span></div>' +
+      '<div class="ladder">' + ladder + '</div>';
+  }
+
+  // ---- start login ----
+  async function login() {
+    const verifier = randomString(64), state = randomString(16);
+    sessionStorage.setItem("cp_verifier", verifier);
+    sessionStorage.setItem("cp_state", state);
+    const params = new URLSearchParams({
+      response_type: "code", client_id: CLIENT_ID, redirect_uri: REDIRECT_URI,
+      code_challenge_method: "S256", code_challenge: await challenge(verifier), state: state
+    });
+    location.href = LICHESS + "/oauth?" + params.toString();
+  }
+
+  // ---- handle the redirect back from Lichess ----
+  async function handleCallback() {
+    const url = new URL(location.href);
+    const code = url.searchParams.get("code");
+    if (url.searchParams.get("error")) { history.replaceState(null, "", location.pathname); return; }
+    if (!code) return;
+    const state = url.searchParams.get("state");
+    const expState = sessionStorage.getItem("cp_state");
+    const verifier = sessionStorage.getItem("cp_verifier");
+    history.replaceState(null, "", location.pathname);   // strip ?code from the URL
+    if (!verifier || !state || state !== expState) return;
+    try {
+      const tok = await fetch(LICHESS + "/api/token", {
+        method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({ grant_type: "authorization_code", code: code, code_verifier: verifier, redirect_uri: REDIRECT_URI, client_id: CLIENT_ID })
+      }).then(function (r) { return r.json(); });
+      if (!tok.access_token) throw new Error("no token");
+      const acc = await fetch(LICHESS + "/api/account", { headers: { Authorization: "Bearer " + tok.access_token } }).then(function (r) { return r.json(); });
+      const data = { token: tok.access_token, username: acc.username, id: acc.id, perfs: acc.perfs };
+      localStorage.setItem(LS_KEY, JSON.stringify(data));
+      setConnected(data);
+    } catch (e) {
+      console.warn("Lichess login failed", e);
+    } finally {
+      sessionStorage.removeItem("cp_verifier"); sessionStorage.removeItem("cp_state");
+    }
+  }
+
+  // ---- boot ----
+  document.getElementById("connectNav").addEventListener("click", login);
+  const heroBtn = document.getElementById("connectHero"); if (heroBtn) heroBtn.addEventListener("click", login);
+  const saved = localStorage.getItem(LS_KEY);
+  if (saved) { try { setConnected(JSON.parse(saved)); } catch (e) {} }
+  handleCallback();
+})();
+</script>
 </body>
 </html>
